@@ -14,9 +14,9 @@ GPU: RTX 4060, CUDA 12.4.
 
 1. **Окружение готово.** Нестандартная схема (см. ниже): venv на C:, пакеты на G: через junction.
 2. **Qwen3-TTS-12Hz-1.7B-Base** — установлен, модель скачана в `G:\hf-cache`.
-3. **Первый синтез прошёл успешно.** Короткий тест — `output/test_ru_1.7b.wav`.
-4. **bg-runner** — общий инструмент фонового запуска создан и отлажен в `G:\AI\_MY_PROGRAMMING_3\_AGENT-TOOLS\bg-runner\`.
-5. **Длинный тест запущен.** `output/test_ru_1.7b_long.wav` — художественный отрывок ~200 слов с диалогом.
+3. **Синтез работает.** Несколько тестов: `output/test_ru_1.7b.wav`, `test_ru_1.7b_long.wav`, `test_ru_1.7b_eugene.wav`.
+4. **bg-runner** — общий инструмент фонового запуска создан, отлажен и запушен в GitHub (`_AGENT-TOOLS`). Включает auto-finalizer.
+5. **FastAPI UI готов.** `server.py` + `static/index.html` на порту 8001. Запуск через `start.bat`.
 
 ## Принятые решения
 
@@ -89,17 +89,32 @@ $env:HF_HUB_CACHE = "G:\hf-cache\hub"
 
 **Ключевой вывод:** параметры sampling не меняют голос. Голос меняется только через `ref_audio`.
 
-## Текущая проблема — голос детский, женский
+## Как запускать
 
-Первый синтез дал детский женский голос, потому что `ref_audio` указывает на URL Alibaba с английской женской речью.
-
-**Следующий шаг:** попробовать `eugene.wav` из соседнего проекта как референс:
-
-```python
-ref_audio = r"G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING\voices\eugene.wav"
+```
+start.bat
 ```
 
-Это WAV взрослого мужского голоса. Менять только эту строку в `test_ru.py`, всё остальное оставить.
+Батник устанавливает `HF_HOME`, `HF_HUB_CACHE` и запускает сервер правильным Python:
+`C:\PythonEnvs\qwen3-tts\Scripts\python.exe server.py`
+
+UI доступен на `http://127.0.0.1:8001`.
+
+**Критично:** никогда не запускать `server.py` системным Python 3.13 — torch и soundfile там не установлены.
+
+## Наблюдения по качеству (на 2026-04-29)
+
+- Голос с `eugene.wav` как референсом — мужской, но не идеален
+- Текст без устаревших слов читается заметно лучше
+- Ударения в целом корректные, одна ошибка на длинном тексте
+- Параметры `temperature`, `repetition_penalty`, `subtalker_temperature` вынесены в `config.json` — менять там
+
+## Что делать дальше
+
+1. **Эксперименты с текстом** — подбирать тексты без сложных устаревших слов, сравнивать с XTTS-v2
+2. **Эксперименты с ref_audio** — попробовать другие референсные записи мужского голоса
+3. **Подбор параметров** — снизить `subtalker_temperature` до 0.7 для большей стабильности
+4. **Сравнение с XTTS-v2** — запустить тот же текст в соседнем проекте, послушать оба
 
 ## Структура проекта
 
@@ -107,11 +122,16 @@ ref_audio = r"G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING\voices\eugene.wav"
 VOICE-OVE-RECORDING-QWEEN3/
 ├── Qwen3-TTS/                  # клонированный репозиторий
 ├── _venv-site-packages/        # пакеты (junction → C:\PythonEnvs\qwen3-tts\Lib\site-packages)
-├── output/
-│   ├── test_ru_1.7b.wav        # короткий тест (20 слов)
-│   └── test_ru_1.7b_long.wav   # длинный тест (~200 слов, диалог)
+├── static/
+│   └── index.html              # фронт UI
+├── voices/
+│   └── eugene.wav              # референсный голос
+├── output/                     # результаты синтеза
 ├── logs/                       # логи bg-runner
-├── test_ru.py                  # скрипт синтеза
+├── server.py                   # FastAPI-сервер (порт 8001)
+├── config.json                 # параметры модели
+├── start.bat                   # правильный способ запуска
+├── test_ru.py                  # CLI-скрипт синтеза
 ├── README.md                   # установка и запуск
 ├── HANDOFF.md                  # этот файл
 ├── AGENT_CONTEXT.md            # задачи для терминального агента

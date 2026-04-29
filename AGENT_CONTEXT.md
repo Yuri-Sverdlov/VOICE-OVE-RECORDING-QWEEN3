@@ -148,7 +148,7 @@ Warnings observed but non-fatal:
 
 ---
 
-### [ ] TASK-005 - Синтез с голосом Евгения и текстом из файла
+### [x] TASK-005 - Синтез с голосом Евгения и текстом из файла
 
 `test_ru.py` уже обновлён архитектором. Менять его не нужно.
 
@@ -189,7 +189,7 @@ TASK-005 completion note:
   - `971520 samples`
   - `1,943,084 bytes`
 
-### [ ] TASK-006 - Исправить bg-runner: автоматический финальный статус
+### [x] TASK-006 - Исправить bg-runner: автоматический финальный статус
 
 Проблема: после завершения процесса JSON-статус остаётся `running`, пока вручную
 не вызвать `status.py`. Нужен автоматический финализатор.
@@ -241,7 +241,7 @@ subprocess.Popen(
 
 ---
 
-### [ ] TASK-007 - Создать FastAPI UI для Qwen3-TTS
+### [x] TASK-007 - Создать FastAPI UI для Qwen3-TTS
 
 Адаптация существующего UI из соседнего проекта VOICE-OVE-RECORDING.
 Создать два файла: `server.py` и `static/index.html` в корне этого проекта.
@@ -413,6 +413,47 @@ C:\PythonEnvs\qwen3-tts\Scripts\pip.exe install fastapi uvicorn
 
 ---
 
+### [ ] TASK-008 - Создать start.bat и проверить запуск сервера
+
+**Это единственная открытая задача. С неё начинать.**
+
+#### Проблема
+
+При запуске `server.py` через системный Python возникают ошибки:
+- `No module named 'torch'`
+- `No module named 'soundfile'`
+
+Причина: сервер запускался не тем Python. Torch и все зависимости
+установлены только в `C:\PythonEnvs\qwen3-tts\`.
+
+#### Что сделать
+
+1. Создать `start.bat` в корне проекта:
+
+```bat
+@echo off
+set HF_HOME=G:\hf-cache
+set HF_HUB_CACHE=G:\hf-cache\hub
+start http://127.0.0.1:8001
+C:\PythonEnvs\qwen3-tts\Scripts\python.exe server.py
+```
+
+2. Запустить сервер правильным способом:
+
+```powershell
+$env:HF_HOME = "G:\hf-cache"
+$env:HF_HUB_CACHE = "G:\hf-cache\hub"
+C:\PythonEnvs\qwen3-tts\Scripts\python.exe server.py
+```
+
+3. Открыть `http://127.0.0.1:8001`, ввести короткий текст, запустить синтез.
+
+4. Убедиться что синтез завершился без ошибок и WAV воспроизводится в браузере.
+
+Отчитаться в `AGENT_REPORT`.
+
+---
+
 ## Notes for terminal agent
 
 TASK-006 completion note:
@@ -428,6 +469,20 @@ TASK-006 completion note:
   - `finished_at=2026-04-29T17:12:22`
 - Result:
   - bg-runner now finalizes JSON automatically after process exit
+TASK-007 completion note:
+- Completed on `2026-04-29`
+- Created:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\server.py`
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\static\index.html`
+- Prepared voice:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\voices\eugene.wav`
+- Verified endpoints:
+  - `GET /` -> `200`
+  - `GET /voices` -> `200`
+- Verified synthesis through server:
+  - `job_id=a7188b71`
+  - result file `a7188b71_eugene.wav`
+  - downloaded bytes `222764`
 - Always use `C:\PythonEnvs\qwen3-tts\Scripts\python.exe`
 - Always use `C:\PythonEnvs\qwen3-tts\Scripts\pip.exe`
 - Heavy packages live behind the `site-packages` junction on `G:`

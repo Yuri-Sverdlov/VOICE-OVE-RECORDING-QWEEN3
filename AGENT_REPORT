@@ -381,3 +381,99 @@ Observed result:
 Conclusion:
 - TASK-006 is working
 - bg-runner no longer requires a manual `status.py` call to finalize completed jobs
+
+TASK-007 result
+
+Goal:
+- create a FastAPI UI for Qwen3-TTS based on the sibling XTTS project
+
+Files created:
+- `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\server.py`
+- `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\static\index.html`
+
+Supporting preparation:
+- created `voices/`
+- copied:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\voices\eugene.wav`
+
+Implementation summary:
+- `server.py`
+  - reads model/runtime parameters from `config.json`
+  - loads Qwen3-TTS through `Qwen3TTSModel.from_pretrained(...)`
+  - exposes:
+    - `GET /`
+    - `GET /voices`
+    - `GET /sample/{voice}`
+    - `POST /generate`
+    - `GET /status/{job_id}`
+    - `GET /download/{job_id}`
+    - `GET /history`
+  - runs on `127.0.0.1:8001`
+- `static/index.html`
+  - adapted from XTTS UI
+  - keeps text input, `.txt` loading, progress, result player, history
+  - keeps voice cards with mini-player
+  - adds:
+    - `language` selector
+    - `temperature` slider
+    - `repetition_penalty` slider
+    - `subtalker_temperature` slider
+
+Verification:
+- syntax check:
+  - `python -m py_compile server.py` -> passed
+- server boot test:
+  - `GET /` -> `200`
+  - `GET /voices` -> `200`
+  - response listed:
+    - `eugene.wav`
+
+First synthesis through the new server:
+- server process started successfully on port `8001`
+- request:
+  - short Russian text
+  - voice `eugene`
+- job:
+  - `job_id=a7188b71`
+- final status:
+  - `done`
+- downloaded result:
+  - `a7188b71_eugene.wav`
+  - `222764 bytes`
+
+Conclusion:
+- TASK-007 is working
+- the new FastAPI UI server starts, serves the frontend, lists voices, and completes a real synthesis request
+
+Post-TASK-007 operational fix
+
+Problem:
+- the server was started once with system `Python 3.13`
+- that interpreter does not have the project runtime stack from:
+  - `C:\PythonEnvs\qwen3-tts\`
+- because of that, imports like `torch` / `soundfile` are not guaranteed there
+
+Fix applied:
+- stopped the incorrectly started server
+- created:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\start.bat`
+- restarted the server with:
+  - `C:\PythonEnvs\qwen3-tts\Scripts\python.exe server.py`
+- with environment:
+  - `HF_HOME=G:\hf-cache`
+  - `HF_HUB_CACHE=G:\hf-cache\hub`
+
+Verification after restart:
+- server logs show normal startup on `127.0.0.1:8001`
+- `GET /voices` succeeded
+- synthesis through API completed successfully
+- verified job:
+  - `job_id=c58a6cf7`
+  - final status: `done`
+  - output file: `c58a6cf7_eugene.wav`
+- downloaded verification file:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\logs\server_test_download_2.wav`
+  - `215084 bytes`
+
+Operational conclusion:
+- the Qwen3 UI server must be started only from the qwen3 venv, not from system Python
