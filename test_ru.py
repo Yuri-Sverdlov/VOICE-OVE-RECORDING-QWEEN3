@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -10,18 +11,23 @@ from qwen_tts import Qwen3TTSModel
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = PROJECT_ROOT / "output"
-OUTPUT_PATH = OUTPUT_DIR / "test_ru_1.7b.wav"
+CONFIG_FILE = PROJECT_ROOT / "config.json"
+TEXT_FILE = Path(r"G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING\text\_za_lopatoj_4.txt")
 
 
 def main() -> int:
     os.environ.setdefault("HF_HOME", r"G:\hf-cache")
     os.environ.setdefault("HF_HUB_CACHE", r"G:\hf-cache\hub")
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    model_name = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
-    ref_audio = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-TTS-Repo/clone_2.wav"
-    text = "Тихий вечер опускался на деревню. В воздухе пахло сеном и дымом."
+    cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+
+    output_dir = PROJECT_ROOT / cfg["output_dir"]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "test_ru_1.7b_eugene.wav"
+
+    model_name = cfg["model"]
+    ref_audio = cfg["ref_audio"]
+    text = TEXT_FILE.read_text(encoding="utf-8").strip()
 
     print(f"Loading model: {model_name}", flush=True)
     t0 = time.time()
@@ -39,28 +45,28 @@ def main() -> int:
     g0 = time.time()
     wavs, sr = tts.generate_voice_clone(
         text=text,
-        language="Russian",
+        language=cfg["language"],
         ref_audio=ref_audio,
         ref_text=None,
         x_vector_only_mode=True,
-        max_new_tokens=2048,
+        max_new_tokens=cfg["max_new_tokens"],
         do_sample=True,
         top_k=50,
         top_p=1.0,
-        temperature=0.9,
-        repetition_penalty=1.05,
+        temperature=cfg["temperature"],
+        repetition_penalty=cfg["repetition_penalty"],
         subtalker_dosample=True,
-        subtalker_top_k=50,
-        subtalker_top_p=1.0,
-        subtalker_temperature=0.9,
+        subtalker_top_k=cfg["subtalker_top_k"],
+        subtalker_top_p=cfg["subtalker_top_p"],
+        subtalker_temperature=cfg["subtalker_temperature"],
     )
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     g1 = time.time()
 
-    sf.write(str(OUTPUT_PATH), wavs[0], sr)
+    sf.write(str(output_path), wavs[0], sr)
     print(f"Generation done in {g1 - g0:.2f}s", flush=True)
-    print(f"Saved: {OUTPUT_PATH}", flush=True)
+    print(f"Saved: {output_path}", flush=True)
     print(f"Done: {sr} Hz, {len(wavs[0])} samples", flush=True)
     return 0
 

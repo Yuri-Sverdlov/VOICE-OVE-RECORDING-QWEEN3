@@ -1,0 +1,12 @@
+{
+  "model": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+  "ref_audio": "G:\\AI\\_MY_PROGRAMMING_3\\VOICE-OVE-RECORDING\\voices\\eugene.wav",
+  "language": "Russian",
+  "output_dir": "output",
+  "temperature": 0.9,
+  "repetition_penalty": 1.05,
+  "subtalker_temperature": 0.9,
+  "subtalker_top_k": 50,
+  "subtalker_top_p": 1.0,
+  "max_new_tokens": 2048
+}

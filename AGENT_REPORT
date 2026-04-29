@@ -209,3 +209,175 @@ $env:HF_HUB_CACHE = "G:\hf-cache\hub"
 Следующий логический шаг
 
 Новых открытых задач в текущем `AGENT_CONTEXT.md` больше нет.
+
+Проблема для архитектора: ложное завершение bg-runner на повторном TTS-запуске
+
+Дата наблюдения:
+- `2026-04-29`
+
+Сценарий:
+- после успешного первого синтеза был запущен ещё один тест через shared `bg-runner`
+- команда запуска:
+  - `C:\PythonEnvs\qwen3-tts\Scripts\python.exe test_ru.py`
+- затем для более прозрачного лога:
+  - `C:\PythonEnvs\qwen3-tts\Scripts\python.exe -u test_ru.py`
+
+Какие job это показали:
+- `qwen3-tts-test-3_20260429_161325`
+- `qwen3-tts-test-4_20260429_161416`
+
+Что наблюдается:
+- `status.py` почти сразу показывает `status=done`
+- в JSON фиксируется `finished_at`, как будто job завершена успешно
+- при этом новый `output\test_ru_1.7b.wav` не обновляется
+- лог на момент ложного `done` содержит только раннюю стадию:
+  - `Loading model: Qwen/Qwen3-TTS-12Hz-1.7B-Base`
+- после отдельной проверки процессов выяснилось, что реальные `python.exe test_ru.py` всё ещё живы
+- по повторной проверке лога видно, что процесс на самом деле продолжает работу и доходит до:
+  - `Model ready in 24.89s`
+  - `Generating Russian synthesis...`
+
+Подтверждение проблемы:
+- `bg-runner` считает задачу завершённой, хотя дочерние Python-процессы продолжают жить
+- в системе одновременно висели несколько процессов:
+  - `python.exe test_ru.py`
+  - `python.exe -u test_ru.py`
+- то есть проблема сейчас не в самом запуске Qwen3-TTS, а в механике отслеживания процесса внутри `bg-runner`
+
+Рабочая гипотеза:
+- `launch.py` сохраняет PID промежуточного процесса, который завершается раньше
+- реальная тяжёлая задача продолжает жить как другой процесс
+- из-за этого `status.py` проверяет не тот PID и слишком рано ставит `done`
+
+Почему это важно:
+- текущий `done` в `bg-runner` нельзя считать достоверным признаком успешного завершения TTS-задачи
+- для длинных inference jobs это ломает основную идею инструмента: надёжно сообщать, идёт задача или уже действительно закончилась
+
+Что нужно проверить/решить:
+- какой именно PID сейчас сохраняет `launch.py`
+- не запускается ли команда через промежуточный shell-процесс, который быстро умирает
+- нужно ли отслеживать дерево процессов, а не один PID
+- нужен ли другой способ запуска, чтобы `bg-runner` держал именно реальный рабочий процесс, а не обёртку
+
+Текущее практическое состояние:
+- повторный TTS-тест был действительно запущен
+- `bg-runner` в текущем виде ненадёжно репортит состояние для такого Python workload
+- перед следующими чистыми тестами желательно остановить старые висящие `test_ru.py`, чтобы не копить параллельные генерации и не путать диагностику
+
+Исправление после анализа
+
+Что было изменено в shared `bg-runner`:
+- в `launch.py`
+  - убран `shell=True`
+  - команда теперь запускается как список аргументов через `shlex.split(..., posix=False)`
+  - `shell=False`
+- в `status.py`
+  - для Windows убрана проверка живости процесса через `os.kill(pid, 0)`
+  - вместо этого используется `tasklist` по конкретному PID
+
+Почему понадобился второй фикс:
+- после правки `launch.py` проблема раннего `done` осталась даже на `ping 127.0.0.1 -n 20`
+- это показало, что запуск был уже ближе к правильному, но `status.py` всё ещё неверно определял живость PID на Windows
+
+Проверка после исправления:
+- smoke test:
+  - `job_id`: `smoke-test-5_20260429_162319`
+- промежуточная проверка:
+  - `status=running`
+  - `finished_at=None`
+- финальная проверка после завершения:
+  - `status=done`
+  - `finished_at=2026-04-29T16:23:53`
+
+Новый длинный TTS-запуск после фикса:
+- `job_id`: `qwen3-long-test_20260429_162414`
+- статус на стартовой проверке:
+  - `running`
+- по логу дошёл до:
+  - `Model ready in 15.26s`
+  - `Generating Russian synthesis...`
+
+Вывод:
+- проблема ложного раннего `done` для фоновых задач на Windows исправлена
+- shared `bg-runner` теперь корректно показывает `running` для реального длительного процесса
+
+TASK-005 result
+
+Goal:
+- synthesize Russian text from file with Eugene voice reference
+
+Successful job:
+- `job_id`: `qwen3-eugene-test_20260429_164629`
+- `started_at`: `2026-04-29T16:46:29`
+- `finished_at`: `2026-04-29T16:51:23`
+- final status: `done`
+
+Script/runtime:
+- script:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\test_ru.py`
+- reference audio:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING\voices\eugene.wav`
+- text source:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING\text\_za_lopatoj_4.txt`
+
+Timings from log:
+- `Model ready in 9.13s`
+- `Generation done in 79.49s`
+
+Output:
+- file:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\output\test_ru_1.7b_eugene.wav`
+- metadata from log:
+  - `24000 Hz`
+  - `971520 samples`
+- file size on disk:
+  - `1,943,084 bytes`
+- `LastWriteTime`:
+  - `2026-04-29 16:48:04`
+
+Warnings observed but non-fatal:
+- `SoX could not be found!`
+- `flash-attn is not installed`
+
+TASK-006 result
+
+Goal:
+- make bg-runner finalize `.json` status automatically after the main process exits
+
+Changes made:
+- created:
+  - `G:\AI\_MY_PROGRAMMING_3\_AGENT-TOOLS\bg-runner\_finalizer.py`
+- updated:
+  - `G:\AI\_MY_PROGRAMMING_3\_AGENT-TOOLS\bg-runner\launch.py`
+
+Implementation:
+- `launch.py` now starts a lightweight companion finalizer right after launching the main job
+- `_finalizer.py` waits for the main PID and then updates:
+  - `status`
+  - `finished_at`
+  - `error` if `Traceback` is found in the log
+
+Important implementation note:
+- the first polling version of `_finalizer.py` still got stuck on Windows
+- it was replaced with a more reliable Windows wait path:
+  - `OpenProcess(SYNCHRONIZE)` + `WaitForSingleObject`
+- fallback polling remains for non-Windows environments
+
+Smoke test:
+- job:
+  - `job_id=smoke-test-7_20260429_171215`
+- command:
+  - `ping 127.0.0.1 -n 8`
+
+Verification method:
+- checked the JSON file directly
+- did not call `status.py`
+
+Observed result:
+- JSON updated automatically to:
+  - `status=done`
+  - `finished_at=2026-04-29T17:12:22`
+
+Conclusion:
+- TASK-006 is working
+- bg-runner no longer requires a manual `status.py` call to finalize completed jobs
