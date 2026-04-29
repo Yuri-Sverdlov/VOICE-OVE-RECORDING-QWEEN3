@@ -1,0 +1,211 @@
+AGENT_REPORT
+
+Дата: 2026-04-29
+Проект: `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\`
+
+Текущее состояние
+
+`TASK-002` выполнена.
+`TASK-003` выполнена.
+`TASK-004` выполнена.
+
+Рабочая схема окружения теперь такая:
+- `venv`: `C:\PythonEnvs\qwen3-tts\`
+- исполняемые файлы (`python.exe`, `pip.exe`) запускаются из `C:\PythonEnvs\qwen3-tts\Scripts\`
+- `site-packages` вынесен на `G:` через junction:
+  - `C:\PythonEnvs\qwen3-tts\Lib\site-packages`
+  - `=> G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\_venv-site-packages`
+
+Почему так сделано
+
+Изначально архитектурное решение было таким:
+- не держать `venv` на `G:`, потому что Windows блокирует запуск бинарников из
+  `venv\Scripts\` на этом диске
+- перенести `venv` на `C:`
+
+Это сработало только частично:
+- `venv` на `C:` создавался нормально
+- но при установке `torch` на `C:` не хватило места
+
+Фактическое наблюдение:
+- после частичной установки на `C:` свободного места оставалось около `57 KB`
+- `torch` падал на `WinError 126` при загрузке DLL
+
+Поэтому был выбран компромисс:
+- оставить исполняемую часть `venv` на `C:`
+- вынести тяжёлый `site-packages` на `G:`
+- связать их junction-ом
+
+Это сохраняет главный принцип:
+- запуск идёт из `C:`
+- тяжёлые пакеты не упираются в лимит пространства на `C:`
+
+Что было сделано по TASK-002
+
+1. Удалён сломанный `venv` внутри проекта на `G:`
+   - удаление потребовало `takeown`, потому что часть файлов была недоступна
+
+2. Создан новый `venv`:
+   - `C:\PythonEnvs\qwen3-tts`
+
+3. Пересобрана схема `site-packages`:
+   - удалён локальный `site-packages` внутри `venv` на `C:`
+   - создан junction на:
+     - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\_venv-site-packages`
+
+4. Восстановлен `pip` внутри нового `venv`
+   - через `python -m ensurepip --upgrade`
+
+5. Установлен PyTorch CUDA stack:
+   - `torch 2.6.0+cu124`
+   - `torchvision 0.21.0+cu124`
+   - `torchaudio 2.6.0+cu124`
+
+6. Установлен `Qwen3-TTS` из уже клонированного репозитория:
+   - editable install из:
+     - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\Qwen3-TTS`
+
+7. Выполнена проверка:
+   - `torch.__version__` -> `2.6.0+cu124`
+   - `torch.cuda.is_available()` -> `True`
+
+Что было сделано по TASK-003
+
+Создан shared tool:
+- `G:\AI\_MY_PROGRAMMING_3\_AGENT-TOOLS\bg-runner\launch.py`
+- `G:\AI\_MY_PROGRAMMING_3\_AGENT-TOOLS\bg-runner\status.py`
+- `G:\AI\_MY_PROGRAMMING_3\_AGENT-TOOLS\bg-runner\README.md`
+
+Реализованное поведение:
+- `launch.py`
+  - создаёт каталог логов
+  - генерирует `job_id`
+  - запускает команду в фоне
+  - сразу пишет JSON status file
+  - пишет stdout/stderr в `.log`
+  - печатает `job_id`, `pid`, `log_path`
+
+- `status.py`
+  - читает JSON status file
+  - проверяет, жив ли PID
+  - если процесс исчез, обновляет статус на `done` или `error`
+  - смотрит `Traceback` в логе для различения `done/error`
+  - печатает статус, pid, timestamps и хвост лога
+
+Smoke test
+
+Запускался:
+- системным `C:\Users\Yuri\AppData\Local\Programs\Python\Python313\python.exe`
+- командой `ping 127.0.0.1 -n 5`
+
+Результаты:
+- первый smoke test подтвердил, что фоновой запуск и JSON-статус работают
+- после этого был внесён маленький фикс в `launch.py`, потому что лог оставался пустым
+- затем был внесён маленький фикс в `status.py`, потому что печать хвоста лога падала
+  на `UnicodeEncodeError` в консоли Windows
+
+Финальный успешный smoke test:
+- `job_id`: `smoke-test-2_20260429_151051`
+- статус: `done`
+- `started_at`: `2026-04-29T15:10:51`
+- `finished_at`: `2026-04-29T15:11:40`
+- лог прочитан успешно
+
+Замечание по выводу лога:
+- строки `ping` в консоли отображаются с заменами символов (`???`), потому что
+  текст идёт из Windows console/OEM-кодировки
+- это не ломает сам `bg-runner`
+- статус, лог-файл и хвост лога при этом работают
+
+Что было сделано по TASK-004
+
+Цель:
+- выполнить первый русский синтез через Qwen3-TTS
+
+Фактическая модель:
+- `Qwen/Qwen3-TTS-12Hz-1.7B-Base`
+
+Почему не `0.6B`:
+- в актуальном `AGENT_CONTEXT.md` зафиксировано, что нужной `0.6B` модели нет
+- для первого теста используется `1.7B-Base`
+
+Подготовка:
+- создан `test_ru.py` в корне проекта
+- Hugging Face cache перенаправлен на:
+  - `G:\hf-cache`
+  - `G:\hf-cache\hub`
+
+Первая попытка:
+- `job_id`: `qwen3-tts-test_20260429_153017`
+- процесс завис на ранней стадии загрузки модели
+- в логе было сообщение:
+  - `Xet Storage is enabled ... but hf_xet is not installed`
+- `.incomplete` blob оставался нулевого размера
+- этот запуск был остановлен
+
+Исправление:
+- установлен пакет `hf_xet` в `qwen3-tts` venv
+
+Успешный запуск:
+- `job_id`: `qwen3-tts-test-2_20260429_153355`
+- запуск шёл через shared `bg-runner`
+- использовался:
+  - `C:\PythonEnvs\qwen3-tts\Scripts\python.exe`
+
+Результат по логу:
+- модельные файлы были скачаны в `G:\hf-cache`
+- `Model ready in 61.38s`
+- `Generation done in 14.73s`
+- сохранён файл:
+  - `G:\AI\_MY_PROGRAMMING_3\VOICE-OVE-RECORDING-QWEEN3\output\test_ru_1.7b.wav`
+- вывод:
+  - `24000 Hz`
+  - `140160 samples`
+
+Финальный статус job:
+- `status=done`
+- `started_at=2026-04-29T15:33:55`
+- `finished_at=2026-04-29T15:35:37`
+
+Нефатальные замечания:
+- `SoX could not be found!`
+  - это предупреждение
+  - синтез при этом завершился успешно
+- `flash-attn is not installed`
+  - это предупреждение
+  - запуск шёл на обычной PyTorch attention path и отработал
+
+Что теперь считается рабочим
+
+Правильный способ запуска для проекта:
+
+```powershell
+C:\PythonEnvs\qwen3-tts\Scripts\python.exe <script>
+```
+
+Правильный способ установки пакетов:
+
+```powershell
+C:\PythonEnvs\qwen3-tts\Scripts\pip.exe install ...
+```
+
+Для Hugging Face моделей:
+
+```powershell
+$env:HF_HOME = "G:\hf-cache"
+$env:HF_HUB_CACHE = "G:\hf-cache\hub"
+```
+
+Если снова будут большие скачивания:
+- задавать `TMP`, `TEMP`, `PIP_CACHE_DIR` в `G:\tmp`
+
+Текущее итоговое состояние
+
+Проект now has:
+- рабочее Qwen3-TTS окружение
+- рабочий shared `bg-runner`
+- первый успешный русский WAV-результат
+
+Следующий логический шаг
+
+Новых открытых задач в текущем `AGENT_CONTEXT.md` больше нет.

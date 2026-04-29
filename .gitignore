@@ -1,0 +1,8 @@
+logs/
+output/
+_venv-site-packages/
+Qwen3-TTS/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
